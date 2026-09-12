@@ -1,4 +1,5 @@
 from ast import Dict
+from turtle import update
 from typing import Any
 from fastapi import FastAPI, HTTPException, status
 from fastapi.exceptions import RequestValidationError
@@ -132,8 +133,13 @@ async def add_task(task: Task):
     }
 
 @app.put('/tasks/{id}', status_code= status.HTTP_200_OK)
-async def update_task(task:TaskUpdate, id:int):
-    existing_task = next((item for item in db if item['id'] == id), None)
+async def update_task(task: TaskUpdate, id:int):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * from tasks WHERE id = ?",(id,))
+    existing_task = cursor.fetchone()
+
+
     if existing_task is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
@@ -145,27 +151,43 @@ async def update_task(task:TaskUpdate, id:int):
             detail=f"Empty body: You must provide a title or done status."
         )
 
-    if task.title is not None and task.done is not None:
-        existing_task['title'] = task.title
-        existing_task['done'] = task.done
+    if task.title is not None:
+        cursor.execute(
+        "UPDATE tasks SET title= ? WHERE id = ?",
+        (task.title, id)
+    )
     
-    if task.title is not None and task.done is None:
-        existing_task['title'] = task.title
+    if task.done is not None:
+        cursor.execute(
+        "UPDATE tasks SET done= ? WHERE id = ?",
+        (task.done, id)
+    )
 
-    if task.title is None and task.done is not None:
-        existing_task['done'] = task.done
+    cursor.execute("SELECT * FROM tasks where id = ?", (id,))
     
-    return existing_task, db
+    updated_task = cursor.fetchone()
+    conn.commit()
+    conn.close()
+    
+    return {
+        "id": updated_task[0],
+        "title": updated_task[1],
+        "done": bool(updated_task[2])
+    }
 
 @app.delete('/tasks/{id}',status_code= status.HTTP_204_NO_CONTENT)
 async def delete_task(id: int):
-    task_index = next(
-        (index for index, item in enumerate(db) if item["id"] == id), None)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * from tasks WHERE id = ?",(id,))
+    existing_task = cursor.fetchone()
 
-    if task_index is None:
+    if existing_task is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
             detail="Unknown task id."
         )
-    del db[task_index]
+    cursor.execute("DELETE FROM tasks where id=?", (id,))
+    conn.commit()
+    conn.close()
     
