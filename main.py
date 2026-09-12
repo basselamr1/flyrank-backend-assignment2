@@ -109,22 +109,27 @@ async def get_task(id:int):
 
 @app.post('/tasks', status_code=status.HTTP_201_CREATED)
 async def add_task(task: Task):
-    new_id = max((item['id'] for item in db), default = 0) + 1
-
+    
     if(not task.title or task.title==""):
          raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Task title can't be empty."
         )
 
-    new_task = {
-        "id": new_id,
-        "title": task.title, 
-        "done": task.done
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.executemany(
+        "INSERT INTO tasks (title, done) VALUES (?,?) RETURNING id, title, done",
+        [(task.title, task.done)]
+    )
+    task = cursor.fetchone()
+    conn.commit()
+    conn.close()
+    return {
+        "id": task[0],
+        "title": task[1],
+        "done": bool(task[2])
     }
-
-    db.append(new_task)
-    return new_task, db
 
 @app.put('/tasks/{id}', status_code= status.HTTP_200_OK)
 async def update_task(task:TaskUpdate, id:int):
