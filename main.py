@@ -79,17 +79,33 @@ async def get_tasks():
     cursor.execute("SELECT * from tasks")
     tasks = cursor.fetchall()
     conn.close()
-    return tasks
+    return [{
+        "id": task['id'],
+        "title": task['title'],
+        "done": bool(task['done'])
+    }
+    for task in tasks
+    ]
 
 @app.get('/tasks/{id}', status_code= status.HTTP_200_OK)
 async def get_task(id:int):
-    task = next((item for item in db if item['id'] == id), None)
+    conn = get_db()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * from tasks WHERE id = ?", (id,))
+    task = cursor.fetchone()
+    conn.close()
+   
     if task is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Item with id: {id} was not found."
         ) 
-    return task
+    return {
+        "id": task['id'],
+        "title": task['title'],
+        "done": bool(task['done'])
+    }
 
 @app.post('/tasks', status_code=status.HTTP_201_CREATED)
 async def add_task(task: Task):
